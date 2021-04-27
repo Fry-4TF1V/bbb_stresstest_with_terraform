@@ -22,7 +22,7 @@ resource openstack_compute_instance_v2 bbb_stresstest_server {
   flavor_name      = var.flavor
   key_pair         = var.keypair_name
   network {
-    name      = "Ext-Net"
+    name           = "Ext-Net"
   }
 }
 
@@ -32,6 +32,7 @@ resource null_resource install_bbb_stresstest {
   triggers     = {
       ids      =  openstack_compute_instance_v2.bbb_stresstest_server[each.key].id
   }
+
   provisioner "remote-exec" {
     connection {
       type     = "ssh"
@@ -41,6 +42,19 @@ resource null_resource install_bbb_stresstest {
 
     inline = [
       "sudo apt update -y && sudo apt upgrade -y",
+      "sudo groupadd docker",
+      "sudo usermod -aG docker $USER",
+    ]
+  }
+
+  provisioner "remote-exec" {
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     =  openstack_compute_instance_v2.bbb_stresstest_server[each.key].access_ip_v4
+    }
+
+    inline = [
       "cd /tmp",
       "git clone https://github.com/openfun/bbb-stress-test.git",
       "sudo apt install make -y",
@@ -48,7 +62,7 @@ resource null_resource install_bbb_stresstest {
       "sudo add-apt-repository universe -y",
       "sudo apt update",
       "sudo apt install docker-compose -y",
-      "sudo make bootstrap",
+      "make bootstrap",
       "sed -i 's/BBB_URL=.*/BBB_URL=https:\\/\\/${var.bbb_fqdn}\\/bigbluebutton\\//g' .env",
       "sed -i 's/BBB_SECRET=.*/BBB_SECRET=${var.bbb_secret}/g' .env",
       "sed -i 's/BBB_MEETING_ID=.*/BBB_MEETING_ID='$(sudo make list-meetings | grep participants | head -n 1 | awk '{print $3}')'/g' .env",
@@ -56,9 +70,7 @@ resource null_resource install_bbb_stresstest {
       "sed -i 's/BBB_CLIENTS_LISTEN_ONLY=.*/BBB_CLIENTS_LISTEN_ONLY=${var.params.listen_only}/g' .env",
       "sed -i 's/BBB_CLIENTS_MIC=.*/BBB_CLIENTS_MIC=${var.params.micro}/g' .env",
       "sed -i 's/BBB_CLIENTS_WEBCAM=.*/BBB_CLIENTS_WEBCAM=${var.params.webcam}/g' .env",
-      # Add --no-sandbox in lib/stress-test.js requested by sudo
-      "sed -i '/\"--mute-audio\",/a\\\n        \"--no-sandbox\",\n' lib/stress-test.js",
-      "sudo make stress",
+      "make stress",
     ]
   }
 }
